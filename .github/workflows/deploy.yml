@@ -21,11 +21,6 @@ jobs:
           php-version: '8.3'
           extensions: intl, mbstring, json, xml, mysqlnd, curl, gd, zip
 
-      # Fix index.php path BEFORE deploying (app folder is one level above public/)
-      - name: Fix index.php path for server structure
-        run: |
-          sed -i "s|FCPATH . '/app/Config/Paths.php'|FCPATH . '../app/Config/Paths.php'|" public/index.php
-
       - name: Install Composer dependencies
         run: composer update --no-dev --optimize-autoloader --no-interaction
 
