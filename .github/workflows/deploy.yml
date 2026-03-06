@@ -21,6 +21,11 @@ jobs:
           php-version: '8.3'
           extensions: intl, mbstring, json, xml, mysqlnd, curl, gd, zip
 
+      # Fix index.php path BEFORE deploying (app folder is one level above public/)
+      - name: Fix index.php path for server structure
+        run: |
+          sed -i "s|FCPATH . '/app/Config/Paths.php'|FCPATH . '../app/Config/Paths.php'|" public/index.php
+
       - name: Install Composer dependencies
         run: composer update --no-dev --optimize-autoloader --no-interaction
 
@@ -86,10 +91,12 @@ jobs:
 
             echo "==> Checking .env..."
             if [ ! -f .env ]; then
-              echo "ERROR: .env missing! Upload it once with:"
-              echo "  scp -i your-key.pem .env ubuntu@13.61.188.172:/var/www/fintrack/.env"
+              echo "ERROR: .env missing!"
               exit 1
             fi
+
+            echo "==> Setting production environment..."
+            sed -i 's/CI_ENVIRONMENT = .*/CI_ENVIRONMENT = production/' .env
 
             echo "==> Running database migrations..."
             php spark migrate --all
@@ -97,7 +104,7 @@ jobs:
             echo "==> Clearing caches..."
             php spark cache:clear || true
 
-            echo "==> Setting ownership - ubuntu owns files, www-data can read..."
+            echo "==> Setting ownership..."
             sudo chown -R ubuntu:www-data /var/www/fintrack
             sudo find /var/www/fintrack -type f -exec chmod 664 {} \;
             sudo find /var/www/fintrack -type d -exec chmod 775 {} \;
