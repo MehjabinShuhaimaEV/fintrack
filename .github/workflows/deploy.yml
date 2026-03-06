@@ -28,7 +28,7 @@ jobs:
           extensions: intl, mbstring, json, xml, mysqlnd, curl, gd, zip
 
       # ──────────────────────────────────────────────
-      # 3. Install Composer dependencies locally
+      # 3. Build vendor folder on GitHub runner
       # ──────────────────────────────────────────────
       - name: Install Composer dependencies
         run: composer update --no-dev --optimize-autoloader --no-interaction
@@ -44,19 +44,98 @@ jobs:
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
       # ──────────────────────────────────────────────
-      # 5. Fix permissions BEFORE rsync
+      # 5. Install & configure server software
+      #    (runs every deploy - safe to run repeatedly)
       # ──────────────────────────────────────────────
-      - name: Fix server permissions before deploy
+      - name: Configure server (Nginx, PHP, MySQL)
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'ENDSSH'
+
+            echo "==> Installing required packages..."
+            sudo apt-get update -y -qq
+            sudo apt-get install -y -qq nginx mysql-server php8.3-fpm \
+              php8.3-mysql php8.3-intl php8.3-mbstring php8.3-xml \
+              php8.3-curl php8.3-gd php8.3-zip php8.3-bcmath \
+              composer unzip
+
+            echo "==> Stopping and disabling Apache if running..."
+            sudo systemctl stop apache2 2>/dev/null || true
+            sudo systemctl disable apache2 2>/dev/null || true
+
+            echo "==> Creating app directory..."
+            sudo mkdir -p /var/www/fintrack/public
+            sudo chown -R ubuntu:www-data /var/www/fintrack
+            sudo chmod -R 775 /var/www/fintrack
+
+            echo "==> Writing Nginx config..."
+            sudo tee /etc/nginx/sites-available/fintrack > /dev/null << 'NGINX'
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    root /var/www/fintrack/public;
+    index index.php index.html;
+
+    server_name _;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_read_timeout 300;
+    }
+
+    location ~* \.(ico|css|js|gif|jpeg|jpg|png|woff|woff2|ttf|svg|eot)$ {
+        expires 30d;
+        add_header Cache-Control "public, no-transform";
+        try_files $uri =404;
+    }
+
+    location ~ /\.(env|git|htaccess) {
+        deny all;
+    }
+
+    location ~ ^/(writable|app|system|vendor)/ {
+        deny all;
+    }
+
+    client_max_body_size 20M;
+    error_log /var/log/nginx/fintrack_error.log;
+    access_log /var/log/nginx/fintrack_access.log;
+}
+NGINX
+
+            echo "==> Enabling Nginx site..."
+            sudo ln -sf /etc/nginx/sites-available/fintrack /etc/nginx/sites-enabled/fintrack
+            sudo rm -f /etc/nginx/sites-enabled/default
+            sudo nginx -t
+            sudo systemctl enable nginx
+            sudo systemctl enable php8.3-fpm
+            sudo systemctl start php8.3-fpm
+            sudo systemctl restart nginx
+
+            echo "==> Server configuration complete!"
+          ENDSSH
+
+      # ──────────────────────────────────────────────
+      # 6. Fix permissions before rsync
+      # ──────────────────────────────────────────────
+      - name: Fix permissions before deploy
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            "sudo mkdir -p ${{ secrets.DEPLOY_PATH }} && \
-             sudo chown -R ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} ${{ secrets.DEPLOY_PATH }} && \
-             sudo chmod -R 775 ${{ secrets.DEPLOY_PATH }} && \
-             sudo chmod -R 777 ${{ secrets.DEPLOY_PATH }}/writable || true"
+            "sudo chown -R ubuntu:ubuntu /var/www/fintrack && \
+             sudo chmod -R 775 /var/www/fintrack && \
+             sudo chmod -R 777 /var/www/fintrack/writable || true"
 
       # ──────────────────────────────────────────────
-      # 6. Deploy files via rsync (vendor included - already built)
+      # 7. Deploy files via rsync
       # ──────────────────────────────────────────────
       - name: Deploy files via rsync
         run: |
@@ -72,18 +151,18 @@ jobs:
             ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PATH }}/
 
       # ──────────────────────────────────────────────
-      # 7. Post-deploy: migrations, then set www-data ownership last
+      # 8. Post-deploy: migrate, cache clear, set ownership
       # ──────────────────────────────────────────────
-      - name: Run post-deploy commands on server
+      - name: Post-deploy tasks
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'ENDSSH'
             set -e
-            cd ${{ secrets.DEPLOY_PATH }}
+            cd /var/www/fintrack
 
             echo "==> Checking .env..."
             if [ ! -f .env ]; then
-              echo "ERROR: .env missing! Upload it with:"
+              echo "ERROR: .env missing! Upload it once with:"
               echo "  scp -i your-key.pem .env ubuntu@13.61.188.172:/var/www/fintrack/.env"
               exit 1
             fi
@@ -95,12 +174,13 @@ jobs:
             php spark cache:clear || true
 
             echo "==> Setting final ownership for Nginx/PHP..."
-            sudo chown -R www-data:www-data .
-            sudo chmod -R 755 .
-            sudo chmod -R 777 writable
+            sudo chown -R www-data:www-data /var/www/fintrack
+            sudo chmod -R 755 /var/www/fintrack
+            sudo chmod -R 777 /var/www/fintrack/writable
 
-            echo "==> Reloading PHP-FPM..."
-            sudo systemctl reload php8.3-fpm || sudo systemctl reload php8.1-fpm || sudo systemctl reload php-fpm || true
+            echo "==> Reloading services..."
+            sudo systemctl reload php8.3-fpm
+            sudo systemctl reload nginx
 
-            echo "==> Done! Site live at http://13.61.188.172"
+            echo "==> Deployment complete! Site live at http://13.61.188.172"
           ENDSSH
