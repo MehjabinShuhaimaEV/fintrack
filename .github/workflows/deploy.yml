@@ -92,6 +92,7 @@ jobs:
 
             echo "==> Setting production environment..."
             sed -i 's/CI_ENVIRONMENT = .*/CI_ENVIRONMENT = production/' .env
+            sed -i "s|app.baseURL = .*|app.baseURL = 'http://13.61.188.172/'|" .env
 
             echo "==> Running database migrations..."
             php spark migrate --all
