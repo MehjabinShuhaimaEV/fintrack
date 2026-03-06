@@ -1,0 +1,92 @@
+name: Deploy FinTrack
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Allows manual trigger from GitHub UI
+
+jobs:
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+
+    steps:
+      # ──────────────────────────────────────────────
+      # 1. Checkout the latest code
+      # ──────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ──────────────────────────────────────────────
+      # 2. Set up PHP
+      # ──────────────────────────────────────────────
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: intl, mbstring, json, xml, mysqlnd, curl, gd, zip
+
+      # ──────────────────────────────────────────────
+      # 3. Install Composer dependencies
+      # ──────────────────────────────────────────────
+      - name: Install Composer dependencies
+        run: composer install --no-dev --optimize-autoloader --no-interaction
+
+      # ──────────────────────────────────────────────
+      # 4. Setup SSH key and deploy via rsync
+      # ──────────────────────────────────────────────
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy files via rsync
+        run: |
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.env' \
+            --exclude='writable/logs/*' \
+            --exclude='writable/cache/*' \
+            --exclude='writable/session/*' \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PATH }}/
+
+      # ──────────────────────────────────────────────
+      # 5. Post-deploy: set permissions, run migrations
+      # ──────────────────────────────────────────────
+      - name: Run post-deploy commands on server
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'ENDSSH'
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            echo "==> Setting directory permissions..."
+            sudo chmod -R 755 .
+            sudo chmod -R 775 writable
+            sudo chown -R www-data:www-data .
+
+            echo "==> Checking .env..."
+            if [ ! -f .env ]; then
+              echo "ERROR: .env file is missing on the server! Upload it manually."
+              exit 1
+            fi
+
+            echo "==> Installing/updating Composer dependencies..."
+            composer install --no-dev --optimize-autoloader --no-interaction
+
+            echo "==> Running database migrations..."
+            php spark migrate --all
+
+            echo "==> Clearing CodeIgniter caches..."
+            php spark cache:clear || true
+
+            echo "==> Restarting PHP-FPM..."
+            sudo systemctl reload php8.1-fpm || sudo systemctl reload php-fpm || true
+
+            echo "==> Deployment complete!"
+          ENDSSH
