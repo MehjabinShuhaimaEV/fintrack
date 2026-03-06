@@ -40,7 +40,7 @@ jobs:
                php8.3-fpm php8.3-mysql php8.3-intl php8.3-mbstring \
                php8.3-xml php8.3-curl php8.3-gd php8.3-zip php8.3-bcmath \
                composer unzip && \
-             sudo a2enmod rewrite proxy_fcgi setenvif && \
+             sudo a2enmod rewrite proxy_fcgi setenvif headers && \
              sudo a2enconf php8.3-fpm && \
              sudo systemctl enable apache2 && \
              sudo systemctl enable php8.3-fpm && \
@@ -75,8 +75,8 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
             "sudo cp /var/www/fintrack/deploy/apache.conf /etc/apache2/sites-available/fintrack.conf && \
+             sudo a2dissite 000-default.conf default-ssl.conf 2>/dev/null || true && \
              sudo a2ensite fintrack.conf && \
-             sudo a2dissite 000-default.conf 2>/dev/null || true && \
              sudo apache2ctl configtest && \
              sudo systemctl restart apache2"
 
