@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@v4
 
       # ──────────────────────────────────────────────
-      # 2. Set up PHP
+      # 2. Set up PHP 8.3 (matches server)
       # ──────────────────────────────────────────────
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
@@ -28,7 +28,7 @@ jobs:
           extensions: intl, mbstring, json, xml, mysqlnd, curl, gd, zip
 
       # ──────────────────────────────────────────────
-      # 3. Install Composer dependencies
+      # 3. Install Composer dependencies locally
       # ──────────────────────────────────────────────
       - name: Install Composer dependencies
         run: composer update --no-dev --optimize-autoloader --no-interaction
@@ -44,19 +44,19 @@ jobs:
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
       # ──────────────────────────────────────────────
-      # 5. Fix permissions BEFORE rsync so it can write
+      # 5. Fix permissions BEFORE rsync
       # ──────────────────────────────────────────────
       - name: Fix server permissions before deploy
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
             "sudo mkdir -p ${{ secrets.DEPLOY_PATH }} && \
-             sudo chown -R ${{ secrets.SERVER_USER }}:www-data ${{ secrets.DEPLOY_PATH }} && \
+             sudo chown -R ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} ${{ secrets.DEPLOY_PATH }} && \
              sudo chmod -R 775 ${{ secrets.DEPLOY_PATH }} && \
              sudo chmod -R 777 ${{ secrets.DEPLOY_PATH }}/writable || true"
 
       # ──────────────────────────────────────────────
-      # 6. Deploy files via rsync
+      # 6. Deploy files via rsync (vendor included - already built)
       # ──────────────────────────────────────────────
       - name: Deploy files via rsync
         run: |
@@ -72,7 +72,7 @@ jobs:
             ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PATH }}/
 
       # ──────────────────────────────────────────────
-      # 7. Post-deploy: permissions, migrations, restart
+      # 7. Post-deploy: migrations, then set www-data ownership last
       # ──────────────────────────────────────────────
       - name: Run post-deploy commands on server
         run: |
@@ -81,20 +81,12 @@ jobs:
             set -e
             cd ${{ secrets.DEPLOY_PATH }}
 
-            echo "==> Setting final permissions..."
-            sudo chown -R www-data:www-data .
-            sudo chmod -R 755 .
-            sudo chmod -R 777 writable
-
             echo "==> Checking .env..."
             if [ ! -f .env ]; then
-              echo "ERROR: .env missing! Upload it once with:"
+              echo "ERROR: .env missing! Upload it with:"
               echo "  scp -i your-key.pem .env ubuntu@13.61.188.172:/var/www/fintrack/.env"
               exit 1
             fi
-
-            echo "==> Installing Composer dependencies..."
-            composer update --no-dev --optimize-autoloader --no-interaction
 
             echo "==> Running database migrations..."
             php spark migrate --all
@@ -102,8 +94,13 @@ jobs:
             echo "==> Clearing caches..."
             php spark cache:clear || true
 
-            echo "==> Reloading PHP-FPM..."
-            sudo systemctl reload php8.1-fpm || sudo systemctl reload php-fpm || true
+            echo "==> Setting final ownership for Nginx/PHP..."
+            sudo chown -R www-data:www-data .
+            sudo chmod -R 755 .
+            sudo chmod -R 777 writable
 
-            echo "==> Deployment complete! Site live at http://13.61.188.172"
+            echo "==> Reloading PHP-FPM..."
+            sudo systemctl reload php8.3-fpm || sudo systemctl reload php8.1-fpm || sudo systemctl reload php-fpm || true
+
+            echo "==> Done! Site live at http://13.61.188.172"
           ENDSSH
