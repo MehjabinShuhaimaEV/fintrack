@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:  # Allows manual trigger from GitHub UI
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -34,7 +34,7 @@ jobs:
         run: composer install --no-dev --optimize-autoloader --no-interaction
 
       # ──────────────────────────────────────────────
-      # 4. Setup SSH key and deploy via rsync
+      # 4. Setup SSH key
       # ──────────────────────────────────────────────
       - name: Setup SSH key
         run: |
@@ -43,6 +43,21 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
+      # ──────────────────────────────────────────────
+      # 5. Fix permissions BEFORE rsync so it can write
+      # ──────────────────────────────────────────────
+      - name: Fix server permissions before deploy
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "sudo mkdir -p ${{ secrets.DEPLOY_PATH }} && \
+             sudo chown -R ${{ secrets.SERVER_USER }}:www-data ${{ secrets.DEPLOY_PATH }} && \
+             sudo chmod -R 775 ${{ secrets.DEPLOY_PATH }} && \
+             sudo chmod -R 777 ${{ secrets.DEPLOY_PATH }}/writable || true"
+
+      # ──────────────────────────────────────────────
+      # 6. Deploy files via rsync
+      # ──────────────────────────────────────────────
       - name: Deploy files via rsync
         run: |
           rsync -avz --delete \
@@ -52,11 +67,12 @@ jobs:
             --exclude='writable/logs/*' \
             --exclude='writable/cache/*' \
             --exclude='writable/session/*' \
+            --exclude='writable/debugbar/*' \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
             ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PATH }}/
 
       # ──────────────────────────────────────────────
-      # 5. Post-deploy: set permissions, run migrations
+      # 7. Post-deploy: permissions, migrations, restart
       # ──────────────────────────────────────────────
       - name: Run post-deploy commands on server
         run: |
@@ -65,28 +81,29 @@ jobs:
             set -e
             cd ${{ secrets.DEPLOY_PATH }}
 
-            echo "==> Setting directory permissions..."
-            sudo chmod -R 755 .
-            sudo chmod -R 775 writable
+            echo "==> Setting final permissions..."
             sudo chown -R www-data:www-data .
+            sudo chmod -R 755 .
+            sudo chmod -R 777 writable
 
             echo "==> Checking .env..."
             if [ ! -f .env ]; then
-              echo "ERROR: .env file is missing on the server! Upload it manually."
+              echo "ERROR: .env missing! Upload it once with:"
+              echo "  scp -i your-key.pem .env ubuntu@13.61.188.172:/var/www/fintrack/.env"
               exit 1
             fi
 
-            echo "==> Installing/updating Composer dependencies..."
+            echo "==> Installing Composer dependencies..."
             composer install --no-dev --optimize-autoloader --no-interaction
 
             echo "==> Running database migrations..."
             php spark migrate --all
 
-            echo "==> Clearing CodeIgniter caches..."
+            echo "==> Clearing caches..."
             php spark cache:clear || true
 
-            echo "==> Restarting PHP-FPM..."
+            echo "==> Reloading PHP-FPM..."
             sudo systemctl reload php8.1-fpm || sudo systemctl reload php-fpm || true
 
-            echo "==> Deployment complete!"
+            echo "==> Deployment complete! Site live at http://13.61.188.172"
           ENDSSH
