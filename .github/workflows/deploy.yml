@@ -42,18 +42,15 @@ jobs:
                composer unzip && \
              sudo a2enmod rewrite proxy_fcgi setenvif headers && \
              sudo a2enconf php8.3-fpm && \
-             sudo systemctl enable apache2 && \
-             sudo systemctl enable php8.3-fpm && \
-             sudo systemctl start php8.3-fpm && \
-             sudo mkdir -p /var/www/fintrack/public && \
-             sudo chown -R ubuntu:www-data /var/www/fintrack && \
-             sudo chmod -R 775 /var/www/fintrack"
+             sudo systemctl enable apache2 php8.3-fpm && \
+             sudo systemctl start php8.3-fpm"
 
-      - name: Fix permissions before deploy
+      - name: Prepare deploy directory
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            "sudo chown -R ubuntu:ubuntu /var/www/fintrack && \
+            "sudo mkdir -p /var/www/fintrack/writable && \
+             sudo chown -R ubuntu:ubuntu /var/www/fintrack && \
              sudo chmod -R 775 /var/www/fintrack && \
              sudo chmod -R 777 /var/www/fintrack/writable || true"
 
@@ -100,10 +97,12 @@ jobs:
             echo "==> Clearing caches..."
             php spark cache:clear || true
 
-            echo "==> Setting final ownership for Apache/PHP..."
-            sudo chown -R www-data:www-data /var/www/fintrack
-            sudo chmod -R 755 /var/www/fintrack
+            echo "==> Setting ownership - ubuntu owns files, www-data can read..."
+            sudo chown -R ubuntu:www-data /var/www/fintrack
+            sudo find /var/www/fintrack -type f -exec chmod 664 {} \;
+            sudo find /var/www/fintrack -type d -exec chmod 775 {} \;
             sudo chmod -R 777 /var/www/fintrack/writable
+            sudo chmod 644 /var/www/fintrack/.env
 
             echo "==> Reloading services..."
             sudo systemctl reload php8.3-fpm
