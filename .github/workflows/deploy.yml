@@ -12,30 +12,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ──────────────────────────────────────────────
-      # 1. Checkout the latest code
-      # ──────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ──────────────────────────────────────────────
-      # 2. Set up PHP 8.3 (matches server)
-      # ──────────────────────────────────────────────
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
           extensions: intl, mbstring, json, xml, mysqlnd, curl, gd, zip
 
-      # ──────────────────────────────────────────────
-      # 3. Build vendor folder on GitHub runner
-      # ──────────────────────────────────────────────
       - name: Install Composer dependencies
         run: composer update --no-dev --optimize-autoloader --no-interaction
 
-      # ──────────────────────────────────────────────
-      # 4. Setup SSH key
-      # ──────────────────────────────────────────────
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
@@ -43,89 +31,24 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-      # ──────────────────────────────────────────────
-      # 5. Install & configure server software
-      #    (runs every deploy - safe to run repeatedly)
-      # ──────────────────────────────────────────────
-      - name: Configure server (Nginx, PHP, MySQL)
+      - name: Install server software
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'ENDSSH'
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "sudo apt-get update -y -qq && \
+             sudo apt-get install -y -qq apache2 mysql-server php8.3 \
+               php8.3-fpm php8.3-mysql php8.3-intl php8.3-mbstring \
+               php8.3-xml php8.3-curl php8.3-gd php8.3-zip php8.3-bcmath \
+               composer unzip && \
+             sudo a2enmod rewrite proxy_fcgi setenvif && \
+             sudo a2enconf php8.3-fpm && \
+             sudo systemctl enable apache2 && \
+             sudo systemctl enable php8.3-fpm && \
+             sudo systemctl start php8.3-fpm && \
+             sudo mkdir -p /var/www/fintrack/public && \
+             sudo chown -R ubuntu:www-data /var/www/fintrack && \
+             sudo chmod -R 775 /var/www/fintrack"
 
-            echo "==> Installing required packages..."
-            sudo apt-get update -y -qq
-            sudo apt-get install -y -qq nginx mysql-server php8.3-fpm \
-              php8.3-mysql php8.3-intl php8.3-mbstring php8.3-xml \
-              php8.3-curl php8.3-gd php8.3-zip php8.3-bcmath \
-              composer unzip
-
-            echo "==> Stopping and disabling Apache if running..."
-            sudo systemctl stop apache2 2>/dev/null || true
-            sudo systemctl disable apache2 2>/dev/null || true
-
-            echo "==> Creating app directory..."
-            sudo mkdir -p /var/www/fintrack/public
-            sudo chown -R ubuntu:www-data /var/www/fintrack
-            sudo chmod -R 775 /var/www/fintrack
-
-            echo "==> Writing Nginx config..."
-            sudo tee /etc/nginx/sites-available/fintrack > /dev/null << 'NGINX'
-server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
-
-    root /var/www/fintrack/public;
-    index index.php index.html;
-
-    server_name _;
-
-    location / {
-        try_files $uri $uri/ /index.php?$query_string;
-    }
-
-    location ~ \.php$ {
-        include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        include fastcgi_params;
-        fastcgi_read_timeout 300;
-    }
-
-    location ~* \.(ico|css|js|gif|jpeg|jpg|png|woff|woff2|ttf|svg|eot)$ {
-        expires 30d;
-        add_header Cache-Control "public, no-transform";
-        try_files $uri =404;
-    }
-
-    location ~ /\.(env|git|htaccess) {
-        deny all;
-    }
-
-    location ~ ^/(writable|app|system|vendor)/ {
-        deny all;
-    }
-
-    client_max_body_size 20M;
-    error_log /var/log/nginx/fintrack_error.log;
-    access_log /var/log/nginx/fintrack_access.log;
-}
-NGINX
-
-            echo "==> Enabling Nginx site..."
-            sudo ln -sf /etc/nginx/sites-available/fintrack /etc/nginx/sites-enabled/fintrack
-            sudo rm -f /etc/nginx/sites-enabled/default
-            sudo nginx -t
-            sudo systemctl enable nginx
-            sudo systemctl enable php8.3-fpm
-            sudo systemctl start php8.3-fpm
-            sudo systemctl restart nginx
-
-            echo "==> Server configuration complete!"
-          ENDSSH
-
-      # ──────────────────────────────────────────────
-      # 6. Fix permissions before rsync
-      # ──────────────────────────────────────────────
       - name: Fix permissions before deploy
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
@@ -134,9 +57,6 @@ NGINX
              sudo chmod -R 775 /var/www/fintrack && \
              sudo chmod -R 777 /var/www/fintrack/writable || true"
 
-      # ──────────────────────────────────────────────
-      # 7. Deploy files via rsync
-      # ──────────────────────────────────────────────
       - name: Deploy files via rsync
         run: |
           rsync -avz --delete \
@@ -150,9 +70,16 @@ NGINX
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
             ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PATH }}/
 
-      # ──────────────────────────────────────────────
-      # 8. Post-deploy: migrate, cache clear, set ownership
-      # ──────────────────────────────────────────────
+      - name: Configure Apache2
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "sudo cp /var/www/fintrack/deploy/apache.conf /etc/apache2/sites-available/fintrack.conf && \
+             sudo a2ensite fintrack.conf && \
+             sudo a2dissite 000-default.conf 2>/dev/null || true && \
+             sudo apache2ctl configtest && \
+             sudo systemctl restart apache2"
+
       - name: Post-deploy tasks
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
@@ -173,14 +100,14 @@ NGINX
             echo "==> Clearing caches..."
             php spark cache:clear || true
 
-            echo "==> Setting final ownership for Nginx/PHP..."
+            echo "==> Setting final ownership for Apache/PHP..."
             sudo chown -R www-data:www-data /var/www/fintrack
             sudo chmod -R 755 /var/www/fintrack
             sudo chmod -R 777 /var/www/fintrack/writable
 
             echo "==> Reloading services..."
             sudo systemctl reload php8.3-fpm
-            sudo systemctl reload nginx
+            sudo systemctl reload apache2
 
             echo "==> Deployment complete! Site live at http://13.61.188.172"
           ENDSSH
