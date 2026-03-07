@@ -78,36 +78,28 @@ class AuthController extends BaseController
             $email = $this->request->getPost('email');
             $password = $this->request->getPost('password');
 
-            $details = $this->AuthModel->select_data(
-                'tbl_users',
-                '*',
-                ['email' => $email]
-            );
+            $db = db_connect();
 
-            if (!empty($details)) {
+            $builder = $db->table('tbl_users');
+            $builder->where('email', $email);
+            $query = $builder->get();
 
-                $user = (array) $details[0];
+            $user = $query->getRowArray();
 
-                if (password_verify($password, $user['password'])) {
+            if ($user && password_verify($password, $user['password'])) {
 
-                    $this->session->set([
-                        'user_id' => $user['id'],
-                        'username' => $user['name'],
-                        'role' => 'User',
-                        'isLoggedIn' => true
-                    ]);
+                $this->session->set([
+                    'user_id' => $user['id'],
+                    'username' => $user['name'],
+                    'role' => 'User',
+                    'isLoggedIn' => true
+                ]);
 
-                    return redirect()->to('/dashboard');
-
-                } else {
-
-                    session()->setFlashdata('error', 'Invalid email or password.');
-                    return redirect()->to('/');
-                }
+                return redirect()->to('/dashboard');
 
             } else {
 
-                session()->setFlashdata('error', 'User not found.');
+                session()->setFlashdata('error', 'Invalid email or password.');
                 return redirect()->to('/');
             }
         }
