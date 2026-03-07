@@ -33,9 +33,9 @@ class Database extends Config
     public $default = [
         'DSN'      => '',
         'hostname' => 'localhost',
-        'username' => '',
-        'password' => '',
-        'database' => '',
+        'username' => 'fintrack',
+        'password' => 'Fintrack@2024',
+        'database' => 'fintrack',
         'DBDriver' => 'MySQLi',
         'DBPrefix' => '',
         'pConnect' => false,
