@@ -426,7 +426,7 @@
                             <?php foreach ($last as $transaction): ?>
 
                                 <tr>
-                                    <td> <?= date('d M Y', strtotime($transaction['date'])) ?></td>
+                                    <td> <?= date('d M Y', strtotime($transaction['transaction_date'])) ?></td>
                                     <td>
                                         <div class="fw-semibold"><?= $transaction['voucher_no'] ?></div>
                                         <small class="text-muted"><?= $transaction['category_name'] ?></small>
