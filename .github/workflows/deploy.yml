@@ -113,38 +113,52 @@ jobs:
              sudo a2ensite fintrack.conf &&
              sudo apache2ctl configtest &&
              sudo systemctl reload apache2'
-
       - name: Post-deploy tasks
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'ENDSSH'
+
           set -e
           cd /var/www/fintrack
 
+          echo "Creating writable directories..."
+
+          sudo mkdir -p writable/cache
+          sudo mkdir -p writable/logs
+          sudo mkdir -p writable/session
+          sudo mkdir -p writable/uploads
+          sudo mkdir -p writable/debugbar
+
+          echo "Fixing permissions..."
+
+          sudo chown -R www-data:www-data writable
+          sudo find writable -type d -exec chmod 775 {} \;
+          sudo find writable -type f -exec chmod 664 {} \;
+
+          echo "Checking .env file..."
+
           if [ ! -f .env ]; then
-            echo "ERROR: .env missing!"
+            echo ".env missing!"
             exit 1
           fi
 
-          sed -i 's/CI_ENVIRONMENT = .*/CI_ENVIRONMENT = production/' .env
-          sed -i "s|.*app.baseURL = .*|app.baseURL = 'http://13.63.38.236/'|" .env
+          echo "Running database migrations..."
 
           php spark migrate --all
 
-          sudo chown -R ubuntu:www-data /var/www/fintrack
-          sudo find /var/www/fintrack -type f -exec chmod 664 {} \;
-          sudo find /var/www/fintrack -type d -exec chmod 775 {} \;
-          sudo chown -R www-data:www-data /var/www/fintrack/writable && sudo chmod -R 777 /var/www/fintrack/writable
-          sudo chmod 644 /var/www/fintrack/.env
+          echo "Clearing cache..."
 
           sudo -u www-data php spark cache:clear || true
+
+          echo "Restarting services..."
 
           sudo systemctl reload php8.3-fpm
           sudo systemctl reload apache2
 
-          echo "Deployment complete! Site live at http://13.63.38.236"
-          ENDSSH
+          echo "Deployment complete!"
 
+          ENDSSH
+          
       - name: Remove .env from git tracking if present
         run: |
           if git ls-files --error-unmatch .env 2>/dev/null; then
