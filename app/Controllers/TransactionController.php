@@ -64,16 +64,15 @@ class TransactionController extends BaseController
 
             // Prepare data for this index
             $data = [
-                'date' => $dates[$i],
-                'voucher_no' => $form['voucher_no'][$i],
+                'user_id' => 1,
+                'transaction_date' => $dates[$i],
                 'type' => $form['type'][$i],
                 'category' => $form['category'][$i],
                 'amount' => $form['amount'][$i],
-                'remarks' => $form['remarks'][$i],
+                'description' => $form['remarks'][$i],
                 'payment_mode' => $form['payment_mode'][$i],
                 'status' => 0,
-                'created_at' => date('Y-m-d H:i:s'),
-                'added_by' => 1,
+                'created_at' => date('Y-m-d H:i:s')
             ];
             // dd($data);
 
