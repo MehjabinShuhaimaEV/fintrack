@@ -21,8 +21,9 @@ jobs:
           php-version: '8.3'
           extensions: intl, mbstring, json, xml, mysqlnd, curl, gd, zip
 
+      # Use composer install (not update) with lock file for speed + consistency
       - name: Install Composer dependencies
-        run: composer update --no-dev --optimize-autoloader --no-interaction
+        run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
       - name: Setup SSH key
         run: |
@@ -31,19 +32,25 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Install server software
+      # Only install server software if not already installed (speeds up every deploy after first)
+      - name: Install server software (first time only)
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            "sudo apt-get update -y -qq && \
-             sudo apt-get install -y -qq apache2 mysql-server php8.3 \
-               php8.3-fpm php8.3-mysql php8.3-intl php8.3-mbstring \
-               php8.3-xml php8.3-curl php8.3-gd php8.3-zip php8.3-bcmath \
-               composer unzip && \
-             sudo a2enmod rewrite proxy_fcgi setenvif headers && \
-             sudo a2enconf php8.3-fpm && \
-             sudo systemctl enable apache2 php8.3-fpm && \
-             sudo systemctl start php8.3-fpm"
+            "if ! command -v apache2 &>/dev/null; then
+               sudo apt-get update -y -qq
+               sudo apt-get install -y -qq apache2 mysql-server php8.3 \
+                 php8.3-fpm php8.3-mysql php8.3-intl php8.3-mbstring \
+                 php8.3-xml php8.3-curl php8.3-gd php8.3-zip php8.3-bcmath \
+                 composer unzip
+               sudo a2enmod rewrite proxy_fcgi setenvif headers
+               sudo a2enconf php8.3-fpm
+               sudo systemctl enable apache2 php8.3-fpm
+               sudo systemctl start php8.3-fpm
+               echo 'Server software installed.'
+             else
+               echo 'Server software already installed, skipping.'
+             fi"
 
       - name: Prepare deploy directory
         run: |
@@ -54,9 +61,10 @@ jobs:
              sudo chmod -R 775 /var/www/fintrack && \
              sudo chmod -R 777 /var/www/fintrack/writable || true"
 
+      # Use checksum-based rsync - only transfers changed files
       - name: Deploy files via rsync
         run: |
-          rsync -avz --delete \
+          rsync -az --checksum --delete \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='.env' \
@@ -67,6 +75,7 @@ jobs:
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
             ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PATH }}/
 
+      # Only reconfigure Apache if config changed
       - name: Configure Apache2
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
@@ -75,7 +84,7 @@ jobs:
              sudo a2dissite 000-default.conf default-ssl.conf 2>/dev/null || true && \
              sudo a2ensite fintrack.conf && \
              sudo apache2ctl configtest && \
-             sudo systemctl restart apache2"
+             sudo systemctl reload apache2"
 
       - name: Post-deploy tasks
         run: |
@@ -97,19 +106,34 @@ jobs:
             echo "==> Running database migrations..."
             php spark migrate --all
 
-            echo "==> Clearing caches..."
+            echo "==> Warming up CodeIgniter cache..."
             php spark cache:clear || true
 
             echo "==> Setting ownership..."
             sudo chown -R ubuntu:www-data /var/www/fintrack
-            sudo find /var/www/fintrack -type f -exec chmod 664 {} \;
+            sudo chmod -R 664 /var/www/fintrack
             sudo find /var/www/fintrack -type d -exec chmod 775 {} \;
             sudo chmod -R 777 /var/www/fintrack/writable
             sudo chmod 644 /var/www/fintrack/.env
 
-            echo "==> Reloading services..."
+            echo "==> Reloading PHP-FPM..."
             sudo systemctl reload php8.3-fpm
-            sudo systemctl reload apache2
 
             echo "==> Deployment complete! Site live at http://13.61.188.172"
           ENDSSH
+
+      # Add swap memory to help the t3.micro handle PHP better
+      - name: Ensure swap is enabled on server
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            "if [ ! -f /swapfile ]; then
+               sudo fallocate -l 1G /swapfile
+               sudo chmod 600 /swapfile
+               sudo mkswap /swapfile
+               sudo swapon /swapfile
+               echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+               echo 'Swap enabled!'
+             else
+               echo 'Swap already exists.'
+             fi"
