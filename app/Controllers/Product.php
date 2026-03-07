@@ -7,6 +7,7 @@ use App\Controllers\BaseController;
 use App\Models\NewModel;
 class Product extends BaseController
 {
+    protected $NewModel;
     public function __construct()
     {
         $db = db_connect();
