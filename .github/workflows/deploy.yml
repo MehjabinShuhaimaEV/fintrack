@@ -130,13 +130,14 @@ jobs:
           sed -i "s|.*app.baseURL = .*|app.baseURL = 'http://13.63.38.236/'|" .env
 
           php spark migrate --all
-          php spark cache:clear || true
 
           sudo chown -R ubuntu:www-data /var/www/fintrack
           sudo find /var/www/fintrack -type f -exec chmod 664 {} \;
           sudo find /var/www/fintrack -type d -exec chmod 775 {} \;
           sudo chown -R www-data:www-data /var/www/fintrack/writable && sudo chmod -R 777 /var/www/fintrack/writable
           sudo chmod 644 /var/www/fintrack/.env
+
+          sudo -u www-data php spark cache:clear || true
 
           sudo systemctl reload php8.3-fpm
           sudo systemctl reload apache2
