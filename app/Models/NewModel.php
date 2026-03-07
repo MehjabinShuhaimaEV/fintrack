@@ -5,7 +5,6 @@ namespace App\Models;
 use CodeIgniter\Model;
 use CodeIgniter\Database\ConnectionInterface;
 
-use CodeIgniter\Database\Query;
 class NewModel extends Model
 {
     protected $DBGroup = 'default';
@@ -105,9 +104,18 @@ class NewModel extends Model
     public function get_products_data()
     {
         $query = $this->db->table('tbl_products p');
-        $query->select('p.id,p.product_name,p.brand,p.stockqty,p.price,p.discount,p.tax,p.weight,p.image,p.discription ,p.status,c.name as category_name');
+
+        $query->select('
+            p.id,
+            p.name,
+            p.price,
+            p.status,
+            p.created_at,
+            c.name as category_name
+        ');
+
         $query->join('tbl_categories c', 'p.category = c.id', 'left');
-        $query->where('p.delet_status', 0);
+
         return $query->get()->getResultArray();
     }
     public function get_transactions($type)
@@ -125,7 +133,7 @@ class NewModel extends Model
         t.status,
         t.created_at,
         c.name as category_name,
-        m.name as payment_mode_name,
+        m.name as payment_mode_name
     ');
 
         $query->join('tbl_categories c', 't.category = c.id', 'left');
@@ -357,11 +365,11 @@ public function get_filtered_transactions($type, $from_date = null, $to_date = n
 
     // ✅ DATE FILTER (FIXED)
     if (!empty($from_date)) {
-        $query->where('t.transaction_date >=', $from_date . ' 00:00:00');
+        $query->where('t.transaction_date >=', $from_date);
     }
 
     if (!empty($to_date)) {
-        $query->where('t.transaction_date <=', $to_date . ' 23:59:59');
+        $query->where('t.transaction_date <=', $to_date);
     }
 
     // Category (already working)
@@ -434,11 +442,11 @@ public function get_soa_report($payment_mode = null, $from_date = null, $to_date
 
     // Date range filter (DATETIME)
     if (!empty($from_date)) {
-        $query->where('t.transaction_date >=', $from_date . ' 00:00:00');
+        $query->where('t.transaction_date >=', $from_date);
     }
 
     if (!empty($to_date)) {
-        $query->where('t.transaction_date <=', $to_date . ' 23:59:59');
+        $query->where('t.transaction_date <=', $to_date);
     }
 
     // Order by date ascending
@@ -479,11 +487,11 @@ public function get_soa_report($payment_mode = null, $from_date = null, $to_date
 //         $query->where('t.payment_mode', $payment_mode);
 //     }
 //     if (!empty($from_date)) {
-//         $query->where('t.transaction_date >=', $from_date . ' 00:00:00');
+//         $query->where('t.transaction_date >=', $from_date);
 //     }
 
 //     if (!empty($to_date)) {
-//         $query->where('t.transaction_date <=', $to_date . ' 23:59:59');
+//         $query->where('t.transaction_date <=', $to_date);
 //     }
 
 //     // Important for running balance
