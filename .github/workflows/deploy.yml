@@ -23,7 +23,6 @@ jobs:
           php-version: '8.3'
           extensions: intl, mbstring, json, xml, mysqlnd, curl, gd, zip
 
-      # Try install first (fast). If lock file is incompatible, run update and commit new lock file back to repo
       - name: Install or update Composer dependencies
         run: |
           if composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist 2>/dev/null; then
@@ -31,13 +30,11 @@ jobs:
           else
             echo "Lock file incompatible - running composer update..."
             composer update --no-dev --optimize-autoloader --no-interaction --prefer-dist --ignore-platform-reqs
-            echo "Committing updated composer.lock back to repo..."
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add composer.lock
             git commit -m "chore: update composer.lock for PHP 8.3 compatibility [skip ci]"
             git push origin main
-            echo "composer.lock updated in repo - future deploys will use fast install."
           fi
 
       - name: Setup SSH key
@@ -47,70 +44,52 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-      # Only install server software if not already installed
       - name: Install server software (first time only)
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            "if ! command -v apache2 &>/dev/null; then
-               echo 'Installing server software...'
+            'if ! command -v apache2 &>/dev/null; then
                sudo apt-get update -y -qq
-               sudo apt-get install -y -qq apache2 mysql-server php8.3 \
-                 php8.3-fpm php8.3-mysql php8.3-intl php8.3-mbstring \
-                 php8.3-xml php8.3-curl php8.3-gd php8.3-zip php8.3-bcmath \
-                 composer unzip
+               sudo apt-get install -y -qq apache2 mysql-server php8.3 php8.3-fpm php8.3-mysql php8.3-intl php8.3-mbstring php8.3-xml php8.3-curl php8.3-gd php8.3-zip php8.3-bcmath composer unzip
                sudo a2enmod rewrite proxy_fcgi setenvif headers
                sudo a2enconf php8.3-fpm
                sudo systemctl enable apache2 php8.3-fpm
                sudo systemctl start php8.3-fpm
-               echo 'Server software installed.'
+               echo "Server software installed."
              else
-               echo 'Server software already installed, skipping.'
-             fi"
+               echo "Server software already installed, skipping."
+             fi'
 
-      # Add swap memory (only once - helps t3.micro with 1GB RAM)
       - name: Ensure swap memory is enabled
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            "if [ ! -f /swapfile ]; then
-               echo 'Creating 1GB swap...'
+            'if [ ! -f /swapfile ]; then
                sudo fallocate -l 1G /swapfile
                sudo chmod 600 /swapfile
                sudo mkswap /swapfile
                sudo swapon /swapfile
-               echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-               echo 'Swap enabled!'
+               echo "/swapfile none swap sw 0 0" | sudo tee -a /etc/fstab
+               echo "Swap enabled!"
              else
-               echo 'Swap already exists.'
-             fi"
+               echo "Swap already exists."
+             fi'
 
       - name: Tune PHP-FPM and OPcache for performance
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            "sudo tee /etc/php/8.3/fpm/conf.d/99-performance.ini > /dev/null << CONF
-memory_limit = 128M
-max_execution_time = 30
-opcache.enable = 1
-opcache.enable_cli = 1
-opcache.memory_consumption = 64
-opcache.max_accelerated_files = 4000
-opcache.revalidate_freq = 60
-opcache.interned_strings_buffer = 8
-CONF
-sudo systemctl restart php8.3-fpm"
+            'printf "memory_limit = 128M\nmax_execution_time = 30\nopcache.enable = 1\nopcache.enable_cli = 1\nopcache.memory_consumption = 64\nopcache.max_accelerated_files = 4000\nopcache.revalidate_freq = 60\nopcache.interned_strings_buffer = 8\n" | sudo tee /etc/php/8.3/fpm/conf.d/99-performance.ini > /dev/null && sudo systemctl restart php8.3-fpm'
 
       - name: Prepare deploy directory
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            "sudo mkdir -p /var/www/fintrack/writable/{logs,cache,session,uploads,debugbar} && \
-             sudo chown -R ubuntu:ubuntu /var/www/fintrack && \
-             sudo chmod -R 775 /var/www/fintrack && \
-             sudo chmod -R 777 /var/www/fintrack/writable || true"
+            'sudo mkdir -p /var/www/fintrack/writable/{logs,cache,session,uploads,debugbar} &&
+             sudo chown -R ubuntu:ubuntu /var/www/fintrack &&
+             sudo chmod -R 775 /var/www/fintrack &&
+             sudo chmod -R 777 /var/www/fintrack/writable || true'
 
-      # Only transfer changed files
       - name: Deploy files via rsync
         run: |
           rsync -az --checksum --delete \
@@ -129,71 +108,58 @@ sudo systemctl restart php8.3-fpm"
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            "sudo cp /var/www/fintrack/deploy/apache.conf /etc/apache2/sites-available/fintrack.conf && \
-             sudo a2dissite 000-default.conf default-ssl.conf 2>/dev/null || true && \
-             sudo a2ensite fintrack.conf && \
-             sudo apache2ctl configtest && \
-             sudo systemctl reload apache2"
+            'sudo cp /var/www/fintrack/deploy/apache.conf /etc/apache2/sites-available/fintrack.conf &&
+             sudo a2dissite 000-default.conf default-ssl.conf 2>/dev/null || true &&
+             sudo a2ensite fintrack.conf &&
+             sudo apache2ctl configtest &&
+             sudo systemctl reload apache2'
 
       - name: Post-deploy tasks
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'ENDSSH'
-            set -e
-            cd /var/www/fintrack
+          set -e
+          cd /var/www/fintrack
 
-            echo "==> Checking .env..."
-            if [ ! -f .env ]; then
-              echo "ERROR: .env missing! Please upload it manually."
-              exit 1
-            fi
+          if [ ! -f .env ]; then
+            echo "ERROR: .env missing!"
+            exit 1
+          fi
 
-            echo "==> Setting production environment..."
-            sed -i 's/CI_ENVIRONMENT = .*/CI_ENVIRONMENT = production/' .env
-            sed -i "s|.*app.baseURL = .*|app.baseURL = 'http://13.63.38.236/'|" .env
+          sed -i 's/CI_ENVIRONMENT = .*/CI_ENVIRONMENT = production/' .env
+          sed -i "s|.*app.baseURL = .*|app.baseURL = 'http://13.63.38.236/'|" .env
 
-            echo "==> Running database migrations..."
-            php spark migrate --all
+          php spark migrate --all
+          php spark cache:clear || true
 
-            echo "==> Clearing caches..."
-            php spark cache:clear || true
+          sudo chown -R ubuntu:www-data /var/www/fintrack
+          sudo find /var/www/fintrack -type f -exec chmod 664 {} \;
+          sudo find /var/www/fintrack -type d -exec chmod 775 {} \;
+          sudo chmod -R 777 /var/www/fintrack/writable
+          sudo chmod 644 /var/www/fintrack/.env
 
-            echo "==> Setting ownership..."
-            sudo chown -R ubuntu:www-data /var/www/fintrack
-            sudo find /var/www/fintrack -type f -exec chmod 664 {} \;
-            sudo find /var/www/fintrack -type d -exec chmod 775 {} \;
-            sudo chmod -R 777 /var/www/fintrack/writable
-            sudo chmod 644 /var/www/fintrack/.env
+          sudo systemctl reload php8.3-fpm
+          sudo systemctl reload apache2
 
-            echo "==> Reloading services..."
-            sudo systemctl reload php8.3-fpm
-            sudo systemctl reload apache2
-
-            echo "==> Deployment complete! Site live at http://13.63.38.236"
+          echo "Deployment complete! Site live at http://13.63.38.236"
           ENDSSH
 
-      # Remove .env from git tracking if it was accidentally committed
-      - name: Remove .env from git tracking
+      - name: Remove .env from git tracking if present
         run: |
           if git ls-files --error-unmatch .env 2>/dev/null; then
-            echo ".env is tracked by git - removing..."
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git rm --cached .env
             git rm --cached -r writable/ 2>/dev/null || true
-            cat >> .gitignore << 'GITIGNORE'
-.env
-writable/logs/
-writable/cache/
-writable/session/
-writable/uploads/
-writable/debugbar/
-*.log
-GITIGNORE
+            echo ".env" >> .gitignore
+            echo "writable/logs/" >> .gitignore
+            echo "writable/cache/" >> .gitignore
+            echo "writable/session/" >> .gitignore
+            echo "writable/uploads/" >> .gitignore
+            echo "writable/debugbar/" >> .gitignore
             git add .gitignore
-            git commit -m "chore: remove .env and writable from git tracking [skip ci]"
+            git commit -m "chore: remove .env from git tracking [skip ci]"
             git push origin main
-            echo ".env removed from git tracking."
           else
-            echo ".env is not tracked by git - all good!"
+            echo ".env not tracked - all good!"
           fi
