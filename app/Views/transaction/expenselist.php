@@ -368,7 +368,7 @@
                             <td>
                                 <div class="date-cell">
                                     <!-- <span class="date-icon">📆</span> -->
-                                    <span> <?= date('d M Y', strtotime($row['date'])) ?>
+                                    <span> <?= date('d M Y', strtotime($row['transaction_date'])) ?>
                                     </span>
                                 </div>
                             </td>
