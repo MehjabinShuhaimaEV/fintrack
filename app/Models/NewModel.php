@@ -181,29 +181,42 @@ public function get_totals()
 // ========================
 public function get_dashboard_summary()
 {
-    $builder = $this->db->table('tbl_transaction');
-
     // TODAY
     $today = date('Y-m-d');
-    $today_income = $builder->selectSum('amount')->where(['type'=>1,'status'=>0,'transaction_date'=>$today])->get()->getRowArray()['amount'] ?? 0;
-    $today_expense = $builder->selectSum('amount')->where(['type'=>2,'status'=>0,'date'=>$today])->get()->getRowArray()['amount'] ?? 0;
+
+    $today_income = $this->db->table('tbl_transaction')
+        ->selectSum('amount')
+        ->where(['type'=>1,'status'=>0,'transaction_date'=>$today])
+        ->get()
+        ->getRowArray()['amount'] ?? 0;
+
+    $today_expense = $this->db->table('tbl_transaction')
+        ->selectSum('amount')
+        ->where(['type'=>2,'status'=>0,'transaction_date'=>$today])
+        ->get()
+        ->getRowArray()['amount'] ?? 0;
 
     // MONTH
     $month = date('m');
     $year  = date('Y');
-    $month_income = $builder->selectSum('amount')
+
+    $month_income = $this->db->table('tbl_transaction')
+        ->selectSum('amount')
         ->where('type',1)
         ->where('status',0)
         ->where('MONTH(transaction_date)',$month)
         ->where('YEAR(transaction_date)',$year)
-        ->get()->getRowArray()['amount'] ?? 0;
+        ->get()
+        ->getRowArray()['amount'] ?? 0;
 
-    $month_expense = $builder->selectSum('amount')
+    $month_expense = $this->db->table('tbl_transaction')
+        ->selectSum('amount')
         ->where('type',2)
         ->where('status',0)
         ->where('MONTH(transaction_date)',$month)
         ->where('YEAR(transaction_date)',$year)
-        ->get()->getRowArray()['amount'] ?? 0;
+        ->get()
+        ->getRowArray()['amount'] ?? 0;
 
     // Last 5 transactions
     $last5 = $this->db->table('tbl_transaction')
@@ -217,10 +230,8 @@ public function get_dashboard_summary()
     return [
         'today_income'  => floatval($today_income),
         'today_expense' => floatval($today_expense),
-
         'month_income'  => floatval($month_income),
         'month_expense' => floatval($month_expense),
-
         'last_transactions' => $last5
     ];
 }
