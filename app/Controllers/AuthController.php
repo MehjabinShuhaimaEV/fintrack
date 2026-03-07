@@ -86,7 +86,7 @@ class AuthController extends BaseController
 
             if (!empty($details)) {
 
-                $user = $details[0];
+                $user = (array) $details[0];
 
                 if (password_verify($password, $user['password'])) {
 
