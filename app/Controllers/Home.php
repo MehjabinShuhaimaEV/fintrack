@@ -3,20 +3,16 @@
 namespace App\Controllers;
 
 use App\Controllers\BaseController;
-
-
-
 use App\Models\NewModel;
-use SebastianBergmann\CodeCoverage\Report\Xml\Totals;
 
 class Home extends BaseController
 {
+    protected $NewModel;   
 
     public function __construct()
     {
         $db = db_connect();
         $this->NewModel = new NewModel($db);
-
     }
     public function index()
     {
