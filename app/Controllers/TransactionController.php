@@ -16,7 +16,7 @@ class TransactionController extends BaseController
     public function __construct()
     {
         $db = db_connect();
-        $this->NewModel = new \App\Models\NewModel($db);
+        $this->NewModel = new NewModel($db);
 
     }
 
