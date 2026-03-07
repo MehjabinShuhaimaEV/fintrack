@@ -201,8 +201,8 @@ public function get_dashboard_summary()
     $month_expense = $builder->selectSum('amount')
         ->where('type',2)
         ->where('status',0)
-        ->where('MONTH(date)',$month)
-        ->where('YEAR(date)',$year)
+        ->where('MONTH(transaction_date)',$month)
+        ->where('YEAR(transaction_date)',$year)
         ->get()->getRowArray()['amount'] ?? 0;
 
     // Last 5 transactions
