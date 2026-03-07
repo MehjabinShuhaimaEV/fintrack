@@ -407,7 +407,7 @@
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                         <path d="M3 3a2 2 0 012-2h6a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V3zm3 1a1 1 0 000 2h4a1 1 0 100-2H6zm0 3a1 1 0 000 2h4a1 1 0 100-2H6zm0 3a1 1 0 100 2h4a1 1 0 100-2H6z"/>
                     </svg>
-                    <?= esc($transaction['voucher_no']) ?>
+                    <?= esc($transaction['id']) ?>
                 </span>
             </div>
             <span class="status-indicator <?= $transaction['status'] == 0 ? 'active' : 'inactive' ?>">
@@ -514,7 +514,7 @@
                         </div>
                         <div class="info-item">
                             <span class="info-label">Transaction ID</span>
-                            <span class="info-value"><?= esc($transaction['voucher_no']) ?></span>
+                            <span class="info-value"><?= esc($transaction['id']) ?></span>
                         </div>
                     </div>
                 </div>
