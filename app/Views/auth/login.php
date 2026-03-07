@@ -255,7 +255,7 @@
 
             <!-- RIGHT SIDE (Improved Finance Image) -->
             <div class="login-right">
-                 <img src="<?= base_url('assets/images/login-bg.jpeg') ?>" class="img-fluid" alt="Login Background">
+                 <img src="<?= base_url('../assets/images/login-bg.jpeg') ?>" class="img-fluid" alt="Login Background">
             
 
             </div>
