@@ -75,29 +75,43 @@ class AuthController extends BaseController
     {
         if ($this->request->getMethod() == 'post') {
 
-            $logdatas = $this->request->getPost();
+            $email = $this->request->getPost('email');
+            $password = $this->request->getPost('password');
 
             $details = $this->AuthModel->select_data(
                 'tbl_users',
-                'email,password',
-                ['email' => $logdatas['email']]
+                '*',
+                ['email' => $email]
             );
 
-            if ($details && password_verify($logdatas['password'], $details[0]['password'])) {
+            if (!empty($details)) {
 
-                session()->setFlashdata('success', 'Login successful!');
+                $user = $details[0];
 
-                return redirect()->to('/dashboard');
+                if (password_verify($password, $user['password'])) {
+
+                    $this->session->set([
+                        'user_id' => $user['id'],
+                        'username' => $user['name'],
+                        'role' => 'User',
+                        'isLoggedIn' => true
+                    ]);
+
+                    return redirect()->to('/dashboard');
+
+                } else {
+
+                    session()->setFlashdata('error', 'Invalid email or password.');
+                    return redirect()->to('/');
+                }
 
             } else {
 
-                session()->setFlashdata('error', 'Invalid email or password.');
-
+                session()->setFlashdata('error', 'User not found.');
                 return redirect()->to('/');
             }
         }
     }
-
     // Logout
     public function logout()
     {
