@@ -464,7 +464,7 @@
                             <td>
                                 <div class="voucher-cell">
                                     <!-- <span class="voucher-icon">🔖</span> -->
-                                    <span><?= $row['voucher_no'] ?></span>
+                                    <span><?= $row['id'] ?></span>
                                 </div>
                             </td>
 
@@ -497,8 +497,8 @@
                             </td>
 
                             <td>
-                                <div class="remarks-cell" title="<?= esc($row['remarks']); ?>">
-                                    <?= esc($row['remarks']); ?>
+                                <div class="remarks-cell" title="<?= esc($row['description']); ?>">
+                                    <?= esc($row['description']); ?>
                                 </div>
                             </td>
 
