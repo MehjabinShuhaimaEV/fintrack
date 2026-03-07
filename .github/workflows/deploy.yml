@@ -135,7 +135,7 @@ jobs:
           sudo chown -R ubuntu:www-data /var/www/fintrack
           sudo find /var/www/fintrack -type f -exec chmod 664 {} \;
           sudo find /var/www/fintrack -type d -exec chmod 775 {} \;
-          sudo chmod -R 777 /var/www/fintrack/writable
+          sudo chown -R www-data:www-data /var/www/fintrack/writable && sudo chmod -R 777 /var/www/fintrack/writable
           sudo chmod 644 /var/www/fintrack/.env
 
           sudo systemctl reload php8.3-fpm
