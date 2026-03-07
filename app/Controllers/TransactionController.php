@@ -12,10 +12,11 @@ $uploadPath = FCPATH . 'assets/uploads';
 
 class TransactionController extends BaseController
 {
+    protected $NewModel;
     public function __construct()
     {
         $db = db_connect();
-        $this->NewModel = new NewModel($db);
+        $this->NewModel = new \App\Models\NewModel($db);
 
     }
 
