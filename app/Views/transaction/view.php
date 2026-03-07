@@ -436,7 +436,7 @@
                     <div class="details-list">
                         <div class="detail-row">
                             <span class="detail-label">Date</span>
-                            <span class="detail-value"><?= transaction_date('l, F j, Y', strtotime($transaction['transaction_date'])) ?></span>
+                            <span class="detail-value"><?= date('l, F j, Y', strtotime($transaction['transaction_date'])) ?></span>
                         </div>
                         <div class="detail-row">
                             <span class="detail-label">Category</span>
