@@ -192,13 +192,12 @@ class TransactionController extends BaseController
             $form = $this->request->getPost();
 
             $data = [
-                'date' => $form['date'],
-                'voucher_no' => $form['voucher_no'],
+                'transaction_date' => $form['date'],
                 'type' => $form['type'],
                 'category' => $form['category'],
                 'amount' => $form['amount'],
                 'payment_mode' => $form['payment_mode'],
-                'remarks' => $form['remarks'],
+                'description' => $form['remarks'],
             ];
 
             $id = $form['id'];
