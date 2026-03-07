@@ -116,7 +116,7 @@ class NewModel extends Model
 
         $query->select('
         t.id,
-        t.date,
+        t.transaction_date,
         t.voucher_no,
         t.type,
         t.category,
@@ -133,7 +133,7 @@ class NewModel extends Model
         $query->join('tbl_mop m', 't.payment_mode = m.id', 'left');
         $query->where('t.type', $type);
         $query->where('t.status', 0);
-        $query->orderBy('t.date', 'DESC');
+        $query->orderBy('t.transaction_date', 'DESC');
         return $query->get()->getResultArray();
     }
 
@@ -185,7 +185,7 @@ public function get_dashboard_summary()
 
     // TODAY
     $today = date('Y-m-d');
-    $today_income = $builder->selectSum('amount')->where(['type'=>1,'status'=>0,'date'=>$today])->get()->getRowArray()['amount'] ?? 0;
+    $today_income = $builder->selectSum('amount')->where(['type'=>1,'status'=>0,'transaction_date'=>$today])->get()->getRowArray()['amount'] ?? 0;
     $today_expense = $builder->selectSum('amount')->where(['type'=>2,'status'=>0,'date'=>$today])->get()->getRowArray()['amount'] ?? 0;
 
     // MONTH
@@ -194,8 +194,8 @@ public function get_dashboard_summary()
     $month_income = $builder->selectSum('amount')
         ->where('type',1)
         ->where('status',0)
-        ->where('MONTH(date)',$month)
-        ->where('YEAR(date)',$year)
+        ->where('MONTH(transaction_date)',$month)
+        ->where('YEAR(transaction_date)',$year)
         ->get()->getRowArray()['amount'] ?? 0;
 
     $month_expense = $builder->selectSum('amount')
@@ -209,7 +209,7 @@ public function get_dashboard_summary()
     $last5 = $this->db->table('tbl_transaction')
         ->select('*')
         ->where('status',0)
-        ->orderBy('date','DESC')
+        ->orderBy('transaction_date','DESC')
         ->limit(5)
         ->get()
         ->getResultArray();
@@ -232,13 +232,13 @@ public function get_monthly_totals()
 
     $results = $builder
         ->select("
-            MONTH(date) as month,
+            MONTH(transaction_date) as month,
             SUM(CASE WHEN type = 1 THEN amount ELSE 0 END) as income,
             SUM(CASE WHEN type = 2 THEN amount ELSE 0 END) as expense
         ")
         ->where('status', 0)
-        ->groupBy("YEAR(date), MONTH(date)")
-        ->orderBy("YEAR(date), MONTH(date)")
+        ->groupBy("YEAR(transaction_date), MONTH(transaction_date)")
+        ->orderBy("YEAR(transaction_date), MONTH(transaction_date)")
         ->limit(12)
         ->get()
         ->getResultArray();
@@ -293,7 +293,7 @@ public function get_recent_transactions($limit = 5)
 
     $query->select('
         t.id,
-        t.date,
+        t.transaction_date,
         t.voucher_no,
         t.type,
         t.category,
@@ -310,7 +310,7 @@ public function get_recent_transactions($limit = 5)
     $query->join('tbl_mop m', 't.payment_mode = m.id', 'left');
 
     $query->where('t.status', 0);
-    $query->orderBy('t.date', 'DESC');
+    $query->orderBy('t.transaction_date', 'DESC');
     $query->limit($limit);
 
     return $query->get()->getResultArray();
@@ -326,7 +326,7 @@ public function get_filtered_transactions($type, $from_date = null, $to_date = n
 
     $query->select('
         t.id,
-        t.date,
+        t.transaction_date,
         t.voucher_no,
         t.type,
         t.category,
@@ -349,11 +349,11 @@ public function get_filtered_transactions($type, $from_date = null, $to_date = n
 
     // ✅ DATE FILTER (FIXED)
     if (!empty($from_date)) {
-        $query->where('t.date >=', $from_date . ' 00:00:00');
+        $query->where('t.transaction_date >=', $from_date . ' 00:00:00');
     }
 
     if (!empty($to_date)) {
-        $query->where('t.date <=', $to_date . ' 23:59:59');
+        $query->where('t.transaction_date <=', $to_date . ' 23:59:59');
     }
 
     // Category (already working)
@@ -361,7 +361,7 @@ public function get_filtered_transactions($type, $from_date = null, $to_date = n
         $query->where('t.category', $category);
     }
 
-    $query->orderBy('t.date', 'DESC');
+    $query->orderBy('t.transaction_date', 'DESC');
 
     return $query->get()->getResultArray();
 }
@@ -395,7 +395,7 @@ public function get_soa_report($payment_mode = null, $from_date = null, $to_date
     // Select fields including category name
     $query->select('
         t.id,
-        t.date,
+        t.transaction_date,
         t.type,
         t.amount,
         t.payment_mode,
@@ -426,15 +426,15 @@ public function get_soa_report($payment_mode = null, $from_date = null, $to_date
 
     // Date range filter (DATETIME)
     if (!empty($from_date)) {
-        $query->where('t.date >=', $from_date . ' 00:00:00');
+        $query->where('t.transaction_date >=', $from_date . ' 00:00:00');
     }
 
     if (!empty($to_date)) {
-        $query->where('t.date <=', $to_date . ' 23:59:59');
+        $query->where('t.transaction_date <=', $to_date . ' 23:59:59');
     }
 
     // Order by date ascending
-    $query->orderBy('t.date', 'ASC');
+    $query->orderBy('t.transaction_date', 'ASC');
 
     // Execute and return result
     return $query->get()->getResultArray();
@@ -453,7 +453,7 @@ public function get_soa_report($payment_mode = null, $from_date = null, $to_date
 
 //     $query->select('
 //     t.id,
-//         t.date,
+//         t.transaction_date,
 //         t.type,
 //         t.amount,
 //         t.payment_mode,
@@ -471,15 +471,15 @@ public function get_soa_report($payment_mode = null, $from_date = null, $to_date
 //         $query->where('t.payment_mode', $payment_mode);
 //     }
 //     if (!empty($from_date)) {
-//         $query->where('t.date >=', $from_date . ' 00:00:00');
+//         $query->where('t.transaction_date >=', $from_date . ' 00:00:00');
 //     }
 
 //     if (!empty($to_date)) {
-//         $query->where('t.date <=', $to_date . ' 23:59:59');
+//         $query->where('t.transaction_date <=', $to_date . ' 23:59:59');
 //     }
 
 //     // Important for running balance
-//     $query->orderBy('t.date', 'ASC');
+//     $query->orderBy('t.transaction_date', 'ASC');
 
 //     return $query->get()->getResultArray();
 // }
